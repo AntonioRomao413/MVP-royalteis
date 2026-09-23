@@ -6,10 +6,11 @@
 # pip install fastparquet
 # pip install git+https://github.com/dask/fastparquet
 # pip install pyarrow
+# pip install openpyxl
 # pip install pandas
-#python -m venv venv
-#pip install pyspark
-#pip install notebook findspark
+# python -m venv venv
+# pip install pyspark
+# pip install notebook findspark
 
 import pandas as pd
 from pyspark.sql import SparkSession
