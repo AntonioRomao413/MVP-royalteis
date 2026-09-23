@@ -1,41 +1,61 @@
 # ============================================================
-# TABELA SILVER - ROYALTIES
+# TABELAS SILVER - ROYALTIES E PIB
 # ============================================================
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
+
 # ============================================================
-#   Criar SparkSession
+# Criar SparkSession
 # ============================================================
 
 spark = (
     SparkSession.builder
     .master("local[*]")
-    .appName("silver_royalties")
+    .appName("silver_royalties_pib")
     .getOrCreate()
 )
 
 
 # ============================================================
-#   Caminho da tabela Bronze
+# ============================================================
+# TABELA SILVER - ROYALTIES
+# ============================================================
 # ============================================================
 
-bronze_path = (
+
+# ============================================================
+# Caminho da tabela Bronze
+# ============================================================
+
+bronze_royalties_path = (
     "/workspaces/MVP-royalteis/data/bronze/"
     "bronze_royalties.parquet"
 )
 
 
 # ============================================================
-#    Ler arquivo Bronze
+# Caminho da tabela Silver
 # ============================================================
 
-roy = spark.read.parquet(bronze_path)
+silver_royalties_path = (
+    "/workspaces/MVP-royalteis/data/silver/"
+    "silver_royalties.parquet"
+)
 
 
 # ============================================================
-#    Renomear colunas
+# Ler arquivo Bronze
+# ============================================================
+
+roy = spark.read.parquet(
+    bronze_royalties_path
+)
+
+
+# ============================================================
+# Renomear colunas
 # ============================================================
 
 roy = (
@@ -52,14 +72,14 @@ roy = (
 
 
 # ============================================================
-#   Criar lista de anos
+# Criar lista de anos
 # ============================================================
 
 anos = range(2011, 2022)
 
 
 # ============================================================
-#   Realizar o UNPIVOT
+# Realizar o UNPIVOT
 # ============================================================
 
 roy_long = (
@@ -72,11 +92,6 @@ roy_long = (
                 *[
                     F.struct(
                         F.lit(ano).alias("ano"),
-                        F.col(
-                            f"`TOTAL_{ano}`"
-                        )
-                        .cast("double")
-                        .alias("royalties"),
                         F.round(
                             F.col(
                                 f"`TOTAL_{ano}`"
@@ -100,7 +115,7 @@ roy_long = (
 
 
 # ============================================================
-#    Remover registros zerados
+# Remover registros zerados
 # ============================================================
 
 roy_long = roy_long.filter(
@@ -109,7 +124,7 @@ roy_long = roy_long.filter(
 
 
 # ============================================================
-#   Ordenar resultado
+# Ordenar resultado
 # ============================================================
 
 roy_long = roy_long.orderBy(
@@ -117,43 +132,59 @@ roy_long = roy_long.orderBy(
     "ano",
 )
 
+
 # ============================================================
-#   Exibir resultado
+# Exibir resultado
 # ============================================================
+
+print("=== SILVER ROYALTIES ===")
 
 roy_long.show(
     5,
     truncate=False,
 )
 
-# ============================================================
-#    Exibir estrutura
-# ============================================================
-
 roy_long.printSchema()
 
-# ============================================================
-# TABELA SILVER - ROYALTIES
-# ============================================================
-
 
 # ============================================================
-# Criar SparkSession
+# Salvar tabela Silver - Royalties
 # ============================================================
 
-spark = (
-    SparkSession.builder
-    .master("local[*]")
-    .appName("silver_pib")
-    .getOrCreate()
+roy_long.write \
+    .mode("overwrite") \
+    .parquet(silver_royalties_path)
+
+print(
+    f"Silver Royalties salva em: "
+    f"{silver_royalties_path}"
 )
+
+
+# ============================================================
+# ============================================================
+# TABELA SILVER - PIB
+# ============================================================
+# ============================================================
+
 
 # ============================================================
 # Caminho da tabela Bronze
 # ============================================================
 
-bronze_path = (
-    "/workspaces/MVP-royalteis/data/bronze/bronze_pib.parquet"
+bronze_pib_path = (
+    "/workspaces/MVP-royalteis/data/bronze/"
+    "bronze_pib.parquet"
+)
+
+
+# ============================================================
+# Caminho da tabela Silver
+# ============================================================
+
+silver_pib_path = (
+    "/workspaces/MVP-royalteis/data/silver/"
+    "silver_pib.parquet"
 )
 
 
@@ -161,19 +192,32 @@ bronze_path = (
 # Ler arquivo Bronze
 # ============================================================
 
-pib_raw = spark.read.parquet(bronze_path)
+pib_raw = spark.read.parquet(
+    bronze_pib_path
+)
+
 
 # ============================================================
-# Filtrar municípios e renomear/transformar colunas
+# Filtrar municípios
 # ============================================================
 
 pib = pib_raw.filter(
     F.col("Nível") == "MU"
 )
 
+
+# ============================================================
+# Selecionar e renomear colunas
+# ============================================================
+
 pib = pib.select(
-    F.col("`Cód.`").cast("long").alias("codigo_municipio"),
-    F.col("Município").alias("municipio"),
+    F.col("`Cód.`")
+    .cast("long")
+    .alias("codigo_municipio"),
+
+    F.col("Município")
+    .alias("municipio"),
+
     *[
         F.col(f"`{ano}`")
         .cast("double")
@@ -182,19 +226,23 @@ pib = pib.select(
     ],
 )
 
+
 # ============================================================
 # Transformar PIB para formato longo
 # ============================================================
 
 pib_long = (
-    pib.select(
+    pib
+    .select(
         "codigo_municipio",
         "municipio",
+
         F.explode(
             F.array(
                 *[
                     F.struct(
                         F.lit(ano).alias("ano"),
+
                         F.col(f"pib_{ano}")
                         .cast("double")
                         .alias("pib_reais"),
@@ -211,10 +259,60 @@ pib_long = (
     )
 )
 
+
 # ============================================================
-# Conferir resultado
+# Remover PIB nulo
 # ============================================================
 
-pib_long.show(5, truncate=False)
+pib_long = pib_long.filter(
+    F.col("pib_reais").isNotNull()
+)
+
+
+# ============================================================
+# Ordenar resultado
+# ============================================================
+
+pib_long = pib_long.orderBy(
+    "codigo_municipio",
+    "ano",
+)
+
+
+# ============================================================
+# Exibir resultado
+# ============================================================
+
+print("=== SILVER PIB ===")
+
+pib_long.show(
+    5,
+    truncate=False,
+)
+
 pib_long.printSchema()
 
+
+# ============================================================
+# Salvar tabela Silver - PIB
+# ============================================================
+
+pib_long.write \
+    .mode("overwrite") \
+    .parquet(silver_pib_path)
+
+print(
+    f"Silver PIB salva em: "
+    f"{silver_pib_path}"
+)
+
+
+# ============================================================
+# Finalização
+# ============================================================
+
+print("\n==========================================")
+print("TABELAS SILVER SALVAS COM SUCESSO")
+print("==========================================")
+print(f"Royalties: {silver_royalties_path}")
+print(f"PIB:       {silver_pib_path}")
