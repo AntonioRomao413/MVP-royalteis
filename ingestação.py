@@ -11,6 +11,13 @@
 # python -m venv venv
 # pip install pyspark
 # pip install notebook findspark
+# pip install ipywidgets
+# pip install plotly
+# pip install jinja2
+# pip show jinja2
+# pip install streamlit plotly
+
+
 
 import pandas as pd
 from pyspark.sql import SparkSession

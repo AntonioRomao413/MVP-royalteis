@@ -1,5 +1,5 @@
 # ============================================================
-# TABELA GOLD - REALIZAR JOIN
+# TABELA GOLD 
 # ============================================================
 
 from pyspark.sql import SparkSession
