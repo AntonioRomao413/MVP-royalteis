@@ -1,93 +1,98 @@
 # ============================================================
-# Ingestão de dados de royalties e PIB do RJ
+# INGESTÃO BRONZE - ROYALTIES E PIB DO RJ
 # ============================================================
 
-# conda install -c conda-forge fastparquet
-# pip install fastparquet
-# pip install git+https://github.com/dask/fastparquet
-# pip install pyarrow
-# pip install openpyxl
-# pip install pandas
-# python -m venv venv
-# pip install pyspark
-# pip install notebook findspark
-# pip install ipywidgets
-# pip install plotly
-# pip install jinja2
-# pip show jinja2
-# pip install streamlit plotly
-
-
-
-import pandas as pd
-from pyspark.sql import SparkSession
 from pathlib import Path
+import pandas as pd
+
 
 # ============================================================
-# Inicializar Spark Session
+# CONFIGURAÇÕES
 # ============================================================
 
-spark = SparkSession.builder.appName("RoyaltiesPIB").getOrCreate()
+BASE_DIR = Path("/workspaces/MVP-royalteis")
+INPUT_DIR = BASE_DIR / "dados"
+OUTPUT_DIR = BASE_DIR / "data" / "bronze"
 
-royalties_pd = pd.read_excel(
-    "/workspaces/MVP-royalteis/dados/royalties_rj.xlsx"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ============================================================
+# FUNÇÕES
+# ============================================================
+
+def normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
+    """Padroniza os nomes das colunas."""
+    df = df.copy()
+
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_", regex=False)
+        .str.replace("-", "_", regex=False)
+    )
+
+    return df
+
+
+def ingerir_excel(nome_arquivo: str, nome_saida: str) -> pd.DataFrame:
+    """Lê Excel, normaliza colunas e salva em Parquet."""
+
+    arquivo_entrada = INPUT_DIR / nome_arquivo
+    arquivo_saida = OUTPUT_DIR / nome_saida
+
+    print(f"Lendo: {arquivo_entrada}")
+
+    df = pd.read_excel(arquivo_entrada)
+
+    if df.empty:
+        raise ValueError(f"Arquivo vazio: {arquivo_entrada}")
+
+    df = normalizar_colunas(df)
+
+    df.to_parquet(
+        arquivo_saida,
+        index=False,
+        engine="pyarrow"
+    )
+
+    print(
+        f"OK | {len(df):,} registros | "
+        f"{arquivo_saida}"
+    )
+
+    return df
+
+
+# ============================================================
+# INGESTÃO
+# ============================================================
+
+royalties_pd = ingerir_excel(
+    "royalties_rj.xlsx",
+    "bronze_royalties.parquet"
 )
 
-pib_pd = pd.read_excel(
-    "/workspaces/MVP-royalteis/dados/pib_rj.xlsx"
-)
-
-#print(pib_pd.head())
-#print(royalties_pd.head())
-
-
-# Normalizar nomes das colunas
-royalties_pd.columns = (
-    royalties_pd.columns.astype(str)
-    .str.strip()
-    .str.replace(" ", "_", regex=False)
-)
-
-pib_pd.columns = (
-    pib_pd.columns.astype(str)
-    .str.strip()
-    .str.replace(" ", "_", regex=False)
-)
-
-print(pib_pd.head())
-
-# Converter Pandas DataFrame para Spark DataFrame
-royalties_spark = spark.createDataFrame(royalties_pd)
-pib_spark = spark.createDataFrame(pib_pd)
-
-
-# ============================================================
-#  Criar diretório de saída
-# ============================================================
-
-output_dir = Path("data/bronze")
-output_dir.mkdir(parents=True, exist_ok=True)
-
-
-# ============================================================
-#  Salvar os DataFrames em Parquet
-# ============================================================
-
-royalties_pd.to_parquet(
-    output_dir / "bronze_royalties.parquet",
-    index=False
-)
-
-pib_pd.to_parquet(
-    output_dir / "bronze_pib.parquet",
-    index=False
+pib_pd = ingerir_excel(
+    "pib_rj.xlsx",
+    "bronze_pib.parquet"
 )
 
 
 # ============================================================
-#   Conferir resultado
+# RESUMO
 # ============================================================
 
-print("Arquivos gravados com sucesso!")
-print(f"Royalties: {output_dir / 'bronze_royalties.parquet'}")
-print(f"PIB:       {output_dir / 'bronze_pib.parquet'}")
+print("\n" + "=" * 60)
+print("INGESTÃO CONCLUÍDA")
+print("=" * 60)
+
+print(f"Royalties: {len(royalties_pd):,} registros")
+print(f"PIB:       {len(pib_pd):,} registros")
+
+print("\nArquivos:")
+print(OUTPUT_DIR / "bronze_royalties.parquet")
+print(OUTPUT_DIR / "bronze_pib.parquet")
+

@@ -225,7 +225,7 @@ def formatar_percentual(valor):
 
 
 # ============================================================
-# RANKINGS DE DEPENDÊNCIA
+# RANKINGS
 # ============================================================
 
 def obter_rankings(dados):
@@ -245,66 +245,6 @@ def obter_rankings(dados):
     )
 
     return mais, menos
-
-
-# ============================================================
-# RANKING DE ARRECADAÇÃO DE ROYALTIES
-# ============================================================
-
-def obter_ranking_royalties(dados, top_n=10):
-
-    return (
-        dados[
-            [
-                "municipio",
-                "royalties_real",
-            ]
-        ]
-        .dropna(
-            subset=[
-                "royalties_real"
-            ]
-        )
-        .nlargest(
-            top_n,
-            "royalties_real",
-        )
-        .sort_values(
-            "royalties_real",
-            ascending=True,
-        )
-        .copy()
-    )
-
-
-# ============================================================
-# RANKING DE PIB
-# ============================================================
-
-def obter_ranking_pib(dados, top_n=10):
-
-    return (
-        dados[
-            [
-                "municipio",
-                "pib_reais",
-            ]
-        ]
-        .dropna(
-            subset=[
-                "pib_reais"
-            ]
-        )
-        .nlargest(
-            top_n,
-            "pib_reais",
-        )
-        .sort_values(
-            "pib_reais",
-            ascending=True,
-        )
-        .copy()
-    )
 
 
 # ============================================================
@@ -355,7 +295,7 @@ def preparar_tabela(dados):
 
 
 # ============================================================
-# GRÁFICO DE BARRAS — DEPENDÊNCIA
+# GRÁFICO DE BARRAS
 # ============================================================
 
 def criar_grafico_barras(dados, cor):
@@ -401,122 +341,6 @@ def criar_grafico_barras(dados, cor):
             "l": 160,
             "r": 100,
             "t": 60,
-            "b": 60,
-        },
-    )
-
-    return fig
-
-
-# ============================================================
-# GRÁFICO — RANKING DE ARRECADAÇÃO DE ROYALTIES
-# ============================================================
-
-def criar_grafico_ranking_royalties(
-    dados,
-    ano,
-    top_n=10,
-):
-
-    ranking = obter_ranking_royalties(
-        dados,
-        top_n,
-    )
-
-    fig = px.bar(
-        ranking,
-        x="royalties_real",
-        y="municipio",
-        orientation="h",
-        text="royalties_real",
-        color_discrete_sequence=["#d62728"],
-        labels={
-            "municipio": "Município",
-            "royalties_real":
-                "Arrecadação de Royalties (R$)",
-        },
-        title=(
-            f"TOP {top_n} Municípios por "
-            f"Arrecadação de Royalties — {ano}"
-        ),
-    )
-
-    fig.update_traces(
-        texttemplate="R$ %{text:,.2f}",
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Royalties: R$ %{x:,.2f}"
-            "<extra></extra>"
-        ),
-    )
-
-    fig.update_layout(
-        height=500,
-        template="plotly_white",
-        xaxis_title="Arrecadação de Royalties (R$)",
-        yaxis_title="Município",
-        margin={
-            "l": 160,
-            "r": 180,
-            "t": 80,
-            "b": 60,
-        },
-    )
-
-    return fig
-
-
-# ============================================================
-# GRÁFICO — RANKING DE PIB
-# ============================================================
-
-def criar_grafico_ranking_pib(
-    dados,
-    ano,
-    top_n=10,
-):
-
-    ranking = obter_ranking_pib(
-        dados,
-        top_n,
-    )
-
-    fig = px.bar(
-        ranking,
-        x="pib_reais",
-        y="municipio",
-        orientation="h",
-        text="pib_reais",
-        color_discrete_sequence=["#1f77b4"],
-        labels={
-            "municipio": "Município",
-            "pib_reais": "PIB (R$)",
-        },
-        title=(
-            f"TOP {top_n} Municípios por PIB — {ano}"
-        ),
-    )
-
-    fig.update_traces(
-        texttemplate="R$ %{text:,.2f}",
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "PIB: R$ %{x:,.2f}"
-            "<extra></extra>"
-        ),
-    )
-
-    fig.update_layout(
-        height=500,
-        template="plotly_white",
-        xaxis_title="PIB (R$)",
-        yaxis_title="Município",
-        margin={
-            "l": 160,
-            "r": 180,
-            "t": 80,
             "b": 60,
         },
     )
@@ -775,7 +599,7 @@ if dados_ano.empty:
 
 
 # ============================================================
-# RANKINGS DE DEPENDÊNCIA
+# RANKINGS
 # ============================================================
 
 mais_dependentes, menos_dependentes = (
@@ -847,13 +671,17 @@ else:
 
 
 # ============================================================
-# RANKING DE DEPENDÊNCIA
+# RANKING
 # ============================================================
 
 st.divider()
 
 st.subheader(titulo)
 
+
+# ============================================================
+# GRÁFICO DE BARRAS
+# ============================================================
 
 fig_barras = criar_grafico_barras(
     dados_resultado,
@@ -864,68 +692,6 @@ st.plotly_chart(
     fig_barras,
     use_container_width=True,
 )
-
-
-# ============================================================
-# NOVOS RANKINGS
-# ROYALTIES E PIB
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "💰 Ranking de Arrecadação de Royalties e PIB"
-)
-
-st.markdown(
-    f"""
-    Comparação dos municípios com maior arrecadação
-    de royalties e maior PIB no ano de **{ano}**.
-    """
-)
-
-
-col_royalties, col_pib = st.columns(2)
-
-
-# ============================================================
-# RANKING DE ROYALTIES
-# ============================================================
-
-with col_royalties:
-
-    fig_ranking_royalties = (
-        criar_grafico_ranking_royalties(
-            dados_ano,
-            ano,
-            top_n=10,
-        )
-    )
-
-    st.plotly_chart(
-        fig_ranking_royalties,
-        use_container_width=True,
-    )
-
-
-# ============================================================
-# RANKING DE PIB
-# ============================================================
-
-with col_pib:
-
-    fig_ranking_pib = (
-        criar_grafico_ranking_pib(
-            dados_ano,
-            ano,
-            top_n=10,
-        )
-    )
-
-    st.plotly_chart(
-        fig_ranking_pib,
-        use_container_width=True,
-    )
 
 
 # ============================================================
@@ -1089,8 +855,6 @@ st.caption(
     "Streamlit + PySpark + Plotly."
 )
 
-
 ## utilizar Ctrl + C para encerrar o servidor do Streamlit no terminal
-## /workspaces/MVP-royalteis/.venv/bin/streamlit run /workspaces/MVP-royalteis/analise.py 
-## --server.address 0.0.0.0 --server.port 8501
+## /workspaces/MVP-royalteis/.venv/bin/streamlit run /workspaces/MVP-royalteis/silver.py --server.address 0.0.0.0 --server.port 8501
 ## link do dashboard: http://localhost:8501 - depois abrir no navegador. http://51.8.152.69:8501
