@@ -94,7 +94,7 @@ A análise considera o período de:
 
 Nota: o indicador representa uma razão entre royalties e PIB. Ele não deve ser interpretado isoladamente como uma medida completa de dependência econômica.
 
-🏗️ Arquitetura
+## 🏗️ Arquitetura
 
 O projeto segue uma arquitetura de dados em camadas:
 
@@ -132,7 +132,7 @@ O projeto segue uma arquitetura de dados em camadas:
                     │ Dashboard  │
                     └────────────┘
 
-🥉 Bronze
+## 🥉 Bronze
 
 A camada Bronze é responsável pela ingestão dos dados brutos.
 
