@@ -1091,6 +1091,6 @@ st.caption(
 
 
 ## utilizar Ctrl + C para encerrar o servidor do Streamlit no terminal
-## /workspaces/MVP-royalteis/.venv/bin/streamlit run /workspaces/MVP-royalteis/analise.py 
+## /workspaces/MVP-royalteis/.venv/bin/streamlit run /workspaces/MVP-royalteis/4_analise.py 
 ## --server.address 0.0.0.0 --server.port 8501
 ## link do dashboard: http://localhost:8501 - depois abrir no navegador. http://51.8.152.69:8501
