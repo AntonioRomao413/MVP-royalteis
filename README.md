@@ -4,7 +4,7 @@
 
 O presente trabalho busca compreender o grau de dependência dos municípios do estado do Rio de Janeiro em relação às receitas provenientes dos royalties do petróleo, bem como analisar a participação desses recursos em relação ao Produto Interno Bruto (PIB) municipal.
 
-Para isso, serão analisados dados referentes ao Produto Interno Bruto dos Municípios, disponibilizados pelo Instituto Brasileiro de Geografia e Estatística (IBGE), por meio do Sistema IBGE de Recuperação Automática (SIDRA), e os valores arrecadados pelos municípios em royalties do petróleo, obtidos junto à Agência Nacional do Petróleo, Gás Natural e Biocombustíveis (ANP).
+Para isso, serão analisados dados referentes ao Produto Interno Bruto dos Municípios, disponibilizados pelo Instituto Brasileiro de Geografia e Estatística (IBGE), por meio do Sistema IBGE de Recuperação Automática (SIDRA), tabela 5938, e os valores arrecadados pelos municípios em royalties do petróleo, obtidos junto à Agência Nacional do Petróleo, Gás Natural e Biocombustíveis (ANP).
 
 A partir dessas informações, pretende-se estabelecer uma relação entre o PIB municipal e os valores recebidos em royalties, permitindo identificar o grau de dependência econômica dos municípios fluminenses em relação a essa fonte de receita. A análise também possibilitará observar diferenças entre os municípios e a evolução dessa dependência ao longo do período estudado.O presente trabalho busca compreender o grau de relação dos municípios do estado do Rio de Janeiro com as receitas provenientes dos royalties do petróleo, analisando também a participação desses recursos em relação ao Produto Interno Bruto (PIB) municipal.
 
@@ -89,7 +89,7 @@ Royalties sobre PIB (%) = (Royalties / PIB) × 100
 
 A análise considera o período de:
 
-2011 a 2021
+2011 a 2024
 
 
 Nota: o indicador representa uma razão entre royalties e PIB. Ele não deve ser interpretado isoladamente como uma medida completa de dependência econômica.
@@ -192,7 +192,7 @@ TOTAL_2011
 TOTAL_2012
 TOTAL_2013
 ...
-TOTAL_2021
+TOTAL_2024
 
 
 são transformados para o formato long:
@@ -327,14 +327,14 @@ A comparação entre royalties e PIB exige que ambos estejam na mesma unidade mo
 
 No processamento atual, os royalties passam pela transformação:
 
-royalties_real = valor / 1000
+pib_reais = valor * 1000
 
 
 Portanto, é necessário confirmar na fonte original a unidade do campo utilizado.
 
 Antes de utilizar o indicador, deve ser garantido que:
 
-royalties_real → mesma unidade do pib_reais
+pib_reais → mesma unidade do royalties_real
 
 
 Por exemplo:
@@ -378,7 +378,7 @@ Apresenta os cinco municípios com os menores valores positivos da métrica.
 
 Tecnicamente, trata-se dos:
 
-5 menores valores de royalties / PIB
+10 menores valores de royalties / PIB
 
 📊 Gráfico de barras
 
@@ -452,7 +452,7 @@ Pipeline desenvolvido com:
 
 Python · PySpark · Pandas · Parquet · Streamlit · Plotly
 
-Período analisado: 2011–2021
+Período analisado: 2011–2024
 
 
 ## 💡 Principal insight do projeto

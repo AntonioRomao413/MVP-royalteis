@@ -724,8 +724,8 @@ col_ano, col_info = st.columns(
 with col_ano:
 
     indice_inicial = (
-        anos.index(2021)
-        if 2021 in anos
+        anos.index(2023)
+        if 2023 in anos
         else len(anos) - 1
     )
 

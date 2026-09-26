@@ -11,7 +11,7 @@ from pyspark.sql import functions as F
 # CONFIGURAÇÃO
 # ============================================================
 
-ANOS = range(2011, 2022)
+ANOS = range(2011, 2024)
 
 BASE_PATH = (
     "/workspaces/MVP-royalteis/data"
@@ -147,10 +147,7 @@ roy_long = (
     )
     .withColumn(
         "royalties_real",
-        F.round(
-            F.col("valor") / 1000,
-            2,
-        ),
+        F.col("valor"),
     )
     .drop("valor")
 )
@@ -300,7 +297,10 @@ pib_long = (
     )
     .withColumn(
         "pib_reais",
-        F.col("valor"),
+        F.round(
+            F.col("valor") * 1000,
+            2,
+        ),
     )
     .drop("valor")
 )

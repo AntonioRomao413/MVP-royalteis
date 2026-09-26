@@ -1,11 +1,8 @@
 # ============================================================
-# DASHBOARD DE DEPENDÊNCIA DE ROYALTIES
+# TABELAS SILVER - ROYALTIES E PIB
 # ============================================================
 
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-
+import pyspark.sql
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
@@ -14,847 +11,419 @@ from pyspark.sql import functions as F
 # CONFIGURAÇÃO
 # ============================================================
 
-st.set_page_config(
-    page_title="Dependência de Royalties",
-    page_icon="📊",
-    layout="wide",
+ANOS = range(2011, 2024)
+
+BASE_PATH = (
+    "/workspaces/MVP-royalteis/data"
 )
 
+BRONZE_PATH = f"{BASE_PATH}/bronze"
+SILVER_PATH = f"{BASE_PATH}/silver"
 
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
 
-CAMINHO_GOLD = (
-    "/workspaces/MVP-royalteis/data/gold/"
-    "gold_dependencia_anual.parquet"
+BRONZE_ROYALTIES = (
+    f"{BRONZE_PATH}/bronze_royalties.parquet"
 )
 
-COLUNAS_RANKING = [
-    "municipio",
-    "royalties_real",
-    "pib_reais",
-    "ano",
-    "dependencia_royalties_pct",
-]
+BRONZE_PIB = (
+    f"{BRONZE_PATH}/bronze_pib.parquet"
+)
+
+SILVER_ROYALTIES = (
+    f"{SILVER_PATH}/silver_royalties.parquet"
+)
+
+SILVER_PIB = (
+    f"{SILVER_PATH}/silver_pib.parquet"
+)
 
 
 # ============================================================
 # SPARK
 # ============================================================
 
-@st.cache_resource
-def criar_spark():
-    """
-    Cria uma única sessão Spark para o dashboard.
-    """
-
-    return (
-        SparkSession.builder
-        .appName("DashboardDependenciaRoyalties")
-        .master("local[*]")
-        .config(
-            "spark.driver.bindAddress",
-            "127.0.0.1",
-        )
-        .getOrCreate()
-    )
+spark = (
+    SparkSession.builder
+    .master("local[*]")
+    .appName("Silver Royalties PIB")
+    .getOrCreate()
+)
 
 
 # ============================================================
-# ANOS DISPONÍVEIS
+# FUNÇÃO AUXILIAR
 # ============================================================
 
-@st.cache_data
-def obter_anos(caminho):
+def criar_array_anos(colunas):
     """
-    Obtém os anos disponíveis na Gold.
+    Cria uma estrutura para transformar dados
+    de formato wide para long.
     """
 
-    spark = criar_spark()
-
-    df = (
-        spark.read
-        .parquet(caminho)
-        .select("ano")
-        .withColumn(
-            "ano",
-            F.col("ano").cast("integer"),
-        )
-        .filter(
-            F.col("ano").isNotNull()
-        )
-        .distinct()
-        .orderBy("ano")
-    )
-
-    return [
-        row["ano"]
-        for row in df.collect()
-    ]
-
-
-# ============================================================
-# DADOS DO ANO SELECIONADO
-# ============================================================
-
-@st.cache_data
-def carregar_dados_ano(caminho, ano):
-    """
-    Carrega somente os dados do ano selecionado.
-
-    O filtro é executado pelo Spark antes do toPandas().
-    """
-
-    spark = criar_spark()
-
-    df = (
-        spark.read
-        .parquet(caminho)
-        .select(*COLUNAS_RANKING)
-        .withColumn(
-            "ano",
-            F.col("ano").cast("integer"),
-        )
-        .withColumn(
-            "royalties_real",
-            F.col("royalties_real").cast("double"),
-        )
-        .withColumn(
-            "pib_reais",
-            F.col("pib_reais").cast("double"),
-        )
-        .withColumn(
-            "dependencia_royalties_pct",
-            F.col(
-                "dependencia_royalties_pct"
-            ).cast("double"),
-        )
-        .filter(
-            (F.col("ano") == ano)
-            & F.col("municipio").isNotNull()
-            & F.col(
-                "dependencia_royalties_pct"
-            ).isNotNull()
-        )
-    )
-
-    return df.toPandas()
-
-
-# ============================================================
-# HISTÓRICO DO MUNICÍPIO
-# ============================================================
-
-@st.cache_data
-def carregar_historico(caminho, municipio):
-    """
-    Carrega o histórico de Royalties e PIB
-    do município selecionado.
-    """
-
-    spark = criar_spark()
-
-    df = (
-        spark.read
-        .parquet(caminho)
-        .select(
-            "municipio",
-            "ano",
-            "royalties_real",
-            "pib_reais",
-            "dependencia_royalties_pct",
-        )
-        .withColumn(
-            "ano",
-            F.col("ano").cast("integer"),
-        )
-        .withColumn(
-            "royalties_real",
-            F.col("royalties_real").cast("double"),
-        )
-        .withColumn(
-            "pib_reais",
-            F.col("pib_reais").cast("double"),
-        )
-        .withColumn(
-            "dependencia_royalties_pct",
-            F.col(
-                "dependencia_royalties_pct"
-            ).cast("double"),
-        )
-        .filter(
-            (F.col("municipio") == municipio)
-            & F.col("ano").isNotNull()
-            & F.col("royalties_real").isNotNull()
-            & F.col("pib_reais").isNotNull()
-        )
-        .orderBy("ano")
-    )
-
-    return df.toPandas()
-
-
-# ============================================================
-# FORMATAÇÃO MONETÁRIA
-# ============================================================
-
-def formatar_reais(valor):
-
-    if pd.isna(valor):
-        return "-"
-
-    return (
-        f"R$ {valor:,.2f}"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
-    )
-
-
-# ============================================================
-# FORMATAÇÃO DE PERCENTUAL
-# ============================================================
-
-def formatar_percentual(valor):
-
-    if pd.isna(valor):
-        return "-"
-
-    return f"{valor:.2f}%"
-
-
-# ============================================================
-# RANKINGS
-# ============================================================
-
-def obter_rankings(dados):
-
-    coluna = "dependencia_royalties_pct"
-
-    mais = (
-        dados
-        .nlargest(10, coluna)
-        .copy()
-    )
-
-    menos = (
-        dados
-        .nsmallest(10, coluna)
-        .copy()
-    )
-
-    return mais, menos
-
-
-# ============================================================
-# PREPARAR TABELA
-# ============================================================
-
-def preparar_tabela(dados):
-
-    tabela = (
-        dados[
-            [
-                "municipio",
-                "royalties_real",
-                "pib_reais",
-                "ano",
-                "dependencia_royalties_pct",
-            ]
+    return F.array(
+        *[
+            F.struct(
+                F.lit(ano).cast("integer").alias("ano"),
+                F.col(coluna)
+                .cast("double")
+                .alias("valor"),
+            )
+            for ano, coluna in colunas
         ]
-        .copy()
-        .rename(
-            columns={
-                "municipio": "Município",
-                "royalties_real": "Royalties (R$)",
-                "pib_reais": "PIB (R$)",
-                "ano": "Ano",
-                "dependencia_royalties_pct":
-                    "Dependência (%)",
-            }
-        )
     )
-
-    tabela["Royalties (R$)"] = (
-        tabela["Royalties (R$)"]
-        .map(formatar_reais)
-    )
-
-    tabela["PIB (R$)"] = (
-        tabela["PIB (R$)"]
-        .map(formatar_reais)
-    )
-
-    tabela["Dependência (%)"] = (
-        tabela["Dependência (%)"]
-        .map(formatar_percentual)
-    )
-
-    return tabela
 
 
 # ============================================================
-# GRÁFICO DE BARRAS
+# ============================================================
+# SILVER - ROYALTIES
+# ============================================================
 # ============================================================
 
-def criar_grafico_barras(dados, cor):
-
-    grafico = (
-        dados
-        .sort_values(
-            "dependencia_royalties_pct",
-            ascending=True,
-        )
-    )
-
-    fig = px.bar(
-        grafico,
-        x="dependencia_royalties_pct",
-        y="municipio",
-        orientation="h",
-        text="dependencia_royalties_pct",
-        color_discrete_sequence=[cor],
-        labels={
-            "municipio": "Município",
-            "dependencia_royalties_pct":
-                "Dependência de Royalties (%)",
-        },
-    )
-
-    fig.update_traces(
-        texttemplate="%{text:.2f}%",
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Dependência: %{x:.2f}%"
-            "<extra></extra>"
-        ),
-    )
-
-    fig.update_layout(
-        height=500,
-        template="plotly_white",
-        xaxis_title="Dependência de Royalties (%)",
-        yaxis_title="Município",
-        margin={
-            "l": 160,
-            "r": 100,
-            "t": 60,
-            "b": 60,
-        },
-    )
-
-    return fig
+print("\n=== PROCESSANDO ROYALTIES ===")
 
 
 # ============================================================
-# GRÁFICO DE LINHA
-# ROYALTIES + PIB
+# LEITURA BRONZE
 # ============================================================
 
-def criar_grafico_linha(historico, municipio):
-    """
-    Cria gráfico de linha com a evolução de
-    Royalties e PIB ao longo dos anos.
+roy = (
+    spark.read
+    .parquet(BRONZE_ROYALTIES)
+)
 
-    Royalties -> eixo Y esquerdo
-    PIB       -> eixo Y direito
-    """
 
-    fig = px.line(
-        historico,
-        x="ano",
-        y=[
-            "royalties_real",
-            "pib_reais",
+# ============================================================
+# SELEÇÃO E PADRONIZAÇÃO
+# ============================================================
+
+roy = (
+    roy
+    .select(
+        F.col("Código_MU")
+        .cast("string")
+        .alias("codigo_municipio"),
+
+        F.col("MUNICÍPIOS")
+        .cast("string")
+        .alias("municipio"),
+
+        *[
+            F.col(f"`TOTAL_{ano}`")
+            .cast("double")
+            .alias(f"TOTAL_{ano}")
+            for ano in ANOS
         ],
-        markers=True,
-        labels={
-            "ano": "Ano",
-            "royalties_real": "Royalties (R$)",
-            "pib_reais": "PIB (R$)",
-        },
-        title=(
-            f"Evolução de Royalties e PIB — "
-            f"{municipio}"
+    )
+)
+
+
+# ============================================================
+# TRANSFORMAÇÃO WIDE → LONG
+# ============================================================
+
+roy_long = (
+    roy
+    .select(
+        "codigo_municipio",
+        "municipio",
+
+        F.explode(
+            criar_array_anos(
+                [
+                    (
+                        ano,
+                        f"TOTAL_{ano}",
+                    )
+                    for ano in ANOS
+                ]
+            )
+        ).alias("dados"),
+    )
+    .select(
+        "codigo_municipio",
+        "municipio",
+        "dados.ano",
+        "dados.valor",
+    )
+    .withColumn(
+        "royalties_real",
+        F.round(
+            F.col("valor") / 1000,
+            2,
         ),
     )
-
-    # ========================================================
-    # ROYALTIES
-    # ========================================================
-
-    fig.update_traces(
-        selector={
-            "name": "royalties_real"
-        },
-        line={
-            "color": "#d62728",
-            "width": 3,
-        },
-        marker={
-            "size": 8,
-        },
-        hovertemplate=(
-            "<b>Ano:</b> %{x}<br>"
-            "<b>Royalties:</b> "
-            "R$ %{y:,.2f}"
-            "<extra></extra>"
-        ),
-    )
-
-    # ========================================================
-    # PIB
-    # ========================================================
-
-    fig.update_traces(
-        selector={
-            "name": "pib_reais"
-        },
-        line={
-            "color": "#1f77b4",
-            "width": 3,
-        },
-        marker={
-            "size": 8,
-        },
-        hovertemplate=(
-            "<b>Ano:</b> %{x}<br>"
-            "<b>PIB:</b> "
-            "R$ %{y:,.2f}"
-            "<extra></extra>"
-        ),
-    )
-
-    # ========================================================
-    # LAYOUT
-    # ========================================================
-
-    fig.update_layout(
-        height=500,
-        template="plotly_white",
-        hovermode="x unified",
-
-        xaxis={
-            "title": "Ano",
-            "dtick": 1,
-        },
-
-        yaxis={
-            "title": "Royalties (R$)",
-        },
-
-        yaxis2={
-            "title": "PIB (R$)",
-            "overlaying": "y",
-            "side": "right",
-        },
-
-        margin={
-            "l": 80,
-            "r": 100,
-            "t": 80,
-            "b": 60,
-        },
-
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "xanchor": "center",
-            "x": 0.5,
-        },
-    )
-
-    # ========================================================
-    # EIXOS
-    # ========================================================
-
-    if len(fig.data) >= 2:
-
-        fig.data[0].update(
-            yaxis="y"
-        )
-
-        fig.data[1].update(
-            yaxis="y2"
-        )
-
-    return fig
-
-
-# ============================================================
-# CABEÇALHO
-# ============================================================
-
-st.title(
-    "📊 Ranking de Dependência de Royalties"
-)
-
-st.markdown(
-    """
-    ### Top 10 Municípios mais e menos dependentes de royalties
-
-    Utilize o seletor de ano e os botões abaixo para analisar
-    os municípios.
-    """
+    .drop("valor")
 )
 
 
 # ============================================================
-# ANOS DISPONÍVEIS
+# FILTROS
 # ============================================================
 
-try:
-
-    anos = obter_anos(
-        CAMINHO_GOLD
-    )
-
-except Exception as erro:
-
-    st.error(
-        "Não foi possível acessar a tabela Gold."
-    )
-
-    st.exception(erro)
-
-    st.stop()
-
-
-if not anos:
-
-    st.error(
-        "Nenhum ano foi encontrado na tabela Gold."
-    )
-
-    st.stop()
-
-
-# ============================================================
-# CONTROLES
-# ============================================================
-
-st.divider()
-
-st.subheader("🎛️ Controles")
-
-col_ano, col_info = st.columns(
-    [1, 3]
-)
-
-
-with col_ano:
-
-    indice_inicial = (
-        anos.index(2021)
-        if 2021 in anos
-        else len(anos) - 1
-    )
-
-    ano = st.selectbox(
-        "📅 Selecione o ano",
-        options=anos,
-        index=indice_inicial,
-    )
-
-
-with col_info:
-
-    st.info(
-        f"Você está analisando o ano **{ano}**."
-    )
-
-
-# ============================================================
-# DADOS DO ANO
-# ============================================================
-
-try:
-
-    dados_ano = carregar_dados_ano(
-        CAMINHO_GOLD,
-        ano,
-    )
-
-except Exception as erro:
-
-    st.error(
-        "Não foi possível carregar os dados."
-    )
-
-    st.exception(erro)
-
-    st.stop()
-
-
-if dados_ano.empty:
-
-    st.warning(
-        f"Não existem dados para o ano {ano}."
-    )
-
-    st.stop()
-
-
-# ============================================================
-# RANKINGS
-# ============================================================
-
-mais_dependentes, menos_dependentes = (
-    obter_rankings(dados_ano)
-)
-
-
-# ============================================================
-# ESTADO DO RANKING
-# ============================================================
-
-if "tipo_ranking" not in st.session_state:
-
-    st.session_state.tipo_ranking = "mais"
-
-
-# ============================================================
-# BOTÕES
-# ============================================================
-
-col_mais, col_menos = st.columns(2)
-
-
-with col_mais:
-
-    if st.button(
-        "🔴 TOP 10 MAIS DEPENDENTES",
-        use_container_width=True,
-    ):
-
-        st.session_state.tipo_ranking = "mais"
-
-
-with col_menos:
-
-    if st.button(
-        "🟢 TOP 10 MENOS DEPENDENTES",
-        use_container_width=True,
-    ):
-
-        st.session_state.tipo_ranking = "menos"
-
-
-# ============================================================
-# DEFINIR RANKING
-# ============================================================
-
-if st.session_state.tipo_ranking == "mais":
-
-    dados_resultado = mais_dependentes
-
-    titulo = (
-        f"🔴 TOP 10 Municípios Mais Dependentes "
-        f"de Royalties — {ano}"
-    )
-
-    cor = "#d62728"
-
-else:
-
-    dados_resultado = menos_dependentes
-
-    titulo = (
-        f"🟢 TOP 10 Municípios Menos Dependentes "
-        f"de Royalties — {ano}"
-    )
-
-    cor = "#2ca02c"
-
-
-# ============================================================
-# RANKING
-# ============================================================
-
-st.divider()
-
-st.subheader(titulo)
-
-
-# ============================================================
-# GRÁFICO DE BARRAS
-# ============================================================
-
-fig_barras = criar_grafico_barras(
-    dados_resultado,
-    cor,
-)
-
-st.plotly_chart(
-    fig_barras,
-    use_container_width=True,
-)
-
-
-# ============================================================
-# EVOLUÇÃO HISTÓRICA
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "📈 Evolução de Royalties e PIB"
-)
-
-st.markdown(
-    """
-    Selecione um município para visualizar a evolução
-    dos royalties e do PIB ao longo dos anos.
-    """
-)
-
-
-# ============================================================
-# MUNICÍPIOS
-# ============================================================
-
-municipios = sorted(
-    dados_ano["municipio"]
-    .dropna()
-    .unique()
-    .tolist()
-)
-
-
-if municipios:
-
-    municipio = st.selectbox(
-        "🏙️ Selecione o município",
-        options=municipios,
-    )
-
-    try:
-
-        historico = carregar_historico(
-            CAMINHO_GOLD,
-            municipio,
-        )
-
-    except Exception as erro:
-
-        st.error(
-            "Não foi possível carregar o histórico."
-        )
-
-        st.exception(erro)
-
-        historico = pd.DataFrame()
-
-
-    if historico.empty:
-
-        st.warning(
-            f"Não existem dados históricos para "
-            f"{municipio}."
-        )
-
-    else:
-
-        fig_linha = criar_grafico_linha(
-            historico,
-            municipio,
-        )
-
-        st.plotly_chart(
-            fig_linha,
-            use_container_width=True,
-        )
-
-
-# ============================================================
-# TABELA
-# ============================================================
-
-st.divider()
-
-st.subheader(
-    "📋 Dados dos municípios"
-)
-
-
-dados_tabela = (
-    dados_resultado
-    .sort_values(
-        "dependencia_royalties_pct",
-        ascending=(
-            st.session_state.tipo_ranking == "menos"
-        ),
+roy_long = (
+    roy_long
+    .filter(
+        F.col("codigo_municipio").isNotNull()
+        & F.col("municipio").isNotNull()
+        & F.col("royalties_real").isNotNull()
+        & (F.col("royalties_real") > 0)
     )
 )
 
 
-tabela = preparar_tabela(
-    dados_tabela
-)
+# ============================================================
+# SELEÇÃO FINAL
+# ============================================================
 
-
-st.dataframe(
-    tabela,
-    use_container_width=True,
-    hide_index=True,
+roy_long = roy_long.select(
+    "codigo_municipio",
+    "municipio",
+    "ano",
+    "royalties_real",
 )
 
 
 # ============================================================
-# RESUMO
+# EXIBIR
 # ============================================================
 
-st.divider()
+print("=== SILVER ROYALTIES ===")
 
-col_a, col_b, col_c = st.columns(3)
+roy_long.show(
+    5,
+    truncate=False,
+)
+
+roy_long.printSchema()
 
 
-with col_a:
+# ============================================================
+# SALVAR
+# ============================================================
 
-    st.metric(
-        "Ano",
-        ano,
+(
+    roy_long
+    .write
+    .mode("overwrite")
+    .parquet(SILVER_ROYALTIES)
+)
+
+print(
+    f"Silver Royalties salva em:\n"
+    f"{SILVER_ROYALTIES}"
+)
+
+
+# ============================================================
+# ============================================================
+# SILVER - PIB
+# ============================================================
+# ============================================================
+
+print("\n=== PROCESSANDO PIB ===")
+
+
+# ============================================================
+# LEITURA BRONZE
+# ============================================================
+
+pib_raw = (
+    spark.read
+    .parquet(BRONZE_PIB)
+)
+
+
+# ============================================================
+# FILTRAR MUNICÍPIOS
+# ============================================================
+
+pib = (
+    pib_raw
+    .filter(
+        F.col("Nível") == "MU"
     )
-
-
-with col_b:
-
-    st.metric(
-        "Municípios analisados",
-        len(dados_ano),
-    )
-
-
-with col_c:
-
-    st.metric(
-        "Ranking exibido",
-        (
-            "10 Mais"
-            if st.session_state.tipo_ranking == "mais"
-            else "10 Menos"
-        ),
-    )
+)
 
 
 # ============================================================
-# RODAPÉ
+# SELEÇÃO E PADRONIZAÇÃO
 # ============================================================
 
-st.divider()
+pib = (
+    pib
+    .select(
+        F.col("`Cód.`")
+        .cast("string")
+        .alias("codigo_municipio"),
 
-st.caption(
-    "Fonte dos dados: SIDRA IBGE, ANP"
+        F.col("Município")
+        .cast("string")
+        .alias("municipio"),
+
+        *[
+            F.col(f"`{ano}`")
+            .cast("double")
+            .alias(f"PIB_{ano}")
+            for ano in ANOS
+        ],
+    )
 )
 
-st.caption(
-    "Dashboard desenvolvido com "
-    "Streamlit + PySpark + Plotly."
+
+# ============================================================
+# TRANSFORMAÇÃO WIDE → LONG
+# ============================================================
+
+pib_long = (
+    pib
+    .select(
+        "codigo_municipio",
+        "municipio",
+
+        F.explode(
+            criar_array_anos(
+                [
+                    (
+                        ano,
+                        f"PIB_{ano}",
+                    )
+                    for ano in ANOS
+                ]
+            )
+        ).alias("dados"),
+    )
+    .select(
+        "codigo_municipio",
+        "municipio",
+        "dados.ano",
+        "dados.valor",
+    )
+    .withColumn(
+        "pib_reais",
+        F.col("valor"),
+    )
+    .drop("valor")
 )
 
-## utilizar Ctrl + C para encerrar o servidor do Streamlit no terminal
-## /workspaces/MVP-royalteis/.venv/bin/streamlit run /workspaces/MVP-royalteis/silver.py --server.address 0.0.0.0 --server.port 8501
-## link do dashboard: http://localhost:8501 - depois abrir no navegador. http://51.8.152.69:8501
+
+# ============================================================
+# FILTROS
+# ============================================================
+
+pib_long = (
+    pib_long
+    .filter(
+        F.col("codigo_municipio").isNotNull()
+        & F.col("municipio").isNotNull()
+        & F.col("pib_reais").isNotNull()
+        & (F.col("pib_reais") > 0)
+    )
+)
+
+
+# ============================================================
+# SELEÇÃO FINAL
+# ============================================================
+
+pib_long = pib_long.select(
+    "codigo_municipio",
+    "municipio",
+    "ano",
+    "pib_reais",
+)
+
+
+# ============================================================
+# EXIBIR
+# ============================================================
+
+print("=== SILVER PIB ===")
+
+pib_long.show(
+    5,
+    truncate=False,
+)
+
+pib_long.printSchema()
+
+
+# ============================================================
+# SALVAR
+# ============================================================
+
+(
+    pib_long
+    .write
+    .mode("overwrite")
+    .parquet(SILVER_PIB)
+)
+
+print(
+    f"Silver PIB salva em:\n"
+    f"{SILVER_PIB}"
+)
+
+
+# ============================================================
+# VALIDAÇÃO
+# ============================================================
+
+print("\n==========================================")
+print("VALIDAÇÃO DAS TABELAS SILVER")
+print("==========================================")
+
+
+# ============================================================
+# ROYALTIES
+# ============================================================
+
+print("\n--- ROYALTIES ---")
+
+roy_long.select(
+    F.count("*").alias("registros"),
+    F.countDistinct(
+        "codigo_municipio"
+    ).alias("municipios"),
+    F.min("ano").alias("ano_inicial"),
+    F.max("ano").alias("ano_final"),
+).show()
+
+
+# ============================================================
+# PIB
+# ============================================================
+
+print("--- PIB ---")
+
+pib_long.select(
+    F.count("*").alias("registros"),
+    F.countDistinct(
+        "codigo_municipio"
+    ).alias("municipios"),
+    F.min("ano").alias("ano_inicial"),
+    F.max("ano").alias("ano_final"),
+).show()
+
+
+# ============================================================
+# FINALIZAÇÃO
+# ============================================================
+
+print("\n==========================================")
+print("TABELAS SILVER SALVAS COM SUCESSO")
+print("==========================================")
+
+print(
+    f"Royalties: {SILVER_ROYALTIES}"
+)
+
+print(
+    f"PIB:       {SILVER_PIB}"
+)
+
+
+# ============================================================
+# FINALIZAR SPARK
+# ============================================================
+
+spark.stop()
